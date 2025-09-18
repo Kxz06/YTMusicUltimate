@@ -28,11 +28,7 @@ concurrency:
 jobs:
   build:
     name: Build YTMusicUltimate
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [macos-latest]   # Change to ["self-hosted", "macos"] if you add your own runner
-
+    runs-on: macos-latest
     permissions:
       contents: write
 
@@ -56,9 +52,7 @@ jobs:
           fi
 
       - name: Install Dependencies
-        run: |
-          brew install make ldid || true
-          pipx install --force https://github.com/asdfzxcvbn/pyzule-rw/archive/main.zip
+        run: brew install make ldid
 
       - name: Set PATH environment variable
         run: echo "$(brew --prefix make)/libexec/gnubin" >> $GITHUB_PATH
@@ -93,12 +87,20 @@ jobs:
         env:
           THEOS: ${{ github.workspace }}/theos
 
+      - name: Install cyan
+        run: pipx install --force https://github.com/asdfzxcvbn/pyzule-rw/archive/main.zip
+
       - name: Download YouTube Music
+        id: download_youtube_music
         run: wget "${{ inputs.ipa_url }}" --no-verbose -O ${{ github.workspace }}/main/ytm.ipa
 
       - name: Build Tweak for Sideloading
+        id: build_package
         run: |
           cd ${{ github.workspace }}/main
+          # Prevent Clang from erroring on VLAs in Logos-generated code
+          echo "CFLAGS += -Wno-vla-cxx-extension -Wno-error" >> Makefile
+          echo "CXXFLAGS += -Wno-vla-cxx-extension -Wno-error" >> Makefile
           make clean package SIDELOADING=1
         env:
           THEOS: ${{ github.workspace }}/theos
@@ -108,7 +110,7 @@ jobs:
           cd ${{ github.workspace }}/main/packages
           tweakName=$(ls)
           cd ${{ github.workspace }}/main
-          cyan -i ytm.ipa -o packages/YTMusicUltimate.ipa -uwsf packages/$tweakName -n "${{ inputs.display_name }}" -b ${{ inputs.bundle_id }}
+          cyan -i ytm.ipa -o packages/YTMusicUltimate.ipa -uwsf packages/$tweakName -n "${{ inputs.display_name }}" -b ${{ inputs.bundle_id }} 
 
       - name: Create Release
         uses: softprops/action-gh-release@v2.0.6
